@@ -1,0 +1,52 @@
+# Nombre de pods au démarrage
+replicaCount: 2
+
+# Image Docker de notre app
+image:
+  repository: projet1
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Service Kubernetes (exposition interne)
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8085
+
+# Ingress (point d'entrée HTTP depuis l'extérieur)
+ingress:
+  enabled: true
+  host: springapp.local
+
+# Ressources CPU et RAM par pod
+resources:
+  requests:
+    cpu: 100m       # 100 millicores = 0.1 CPU
+    memory: 256Mi
+  limits:
+    cpu: 500m       # max 0.5 CPU
+    memory: 512Mi
+
+# Auto-scaling : entre 2 et 5 pods selon le CPU
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# Stockage persistant pour les données
+persistence:
+  enabled: true
+  storageClass: standard
+  size: 1Gi
+
+# Config base de données MySQL
+mysql:
+  host: mysql-service
+  port: 3306
+  database: musee_db
+  username: musee_user
+
+# Noms des ressources K8s
+secretName: springapp-secrets
+configMapName: springapp-config

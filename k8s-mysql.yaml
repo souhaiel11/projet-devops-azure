@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: springapp-prod
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: root123
+  MYSQL_DATABASE: musee_db
+  MYSQL_USER: musee_user
+  MYSQL_PASSWORD: musee_password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment
+  namespace: springapp-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-service
+  template:
+    metadata:
+      labels:
+        app: mysql-service
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: mysql-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: springapp-prod
+spec:
+  selector:
+    app: mysql-service
+  ports:
+    - port: 3306
+      targetPort: 3306
