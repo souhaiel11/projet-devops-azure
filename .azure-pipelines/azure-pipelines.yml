@@ -8,6 +8,10 @@ pool:
 
 variables:
   modulePath: 'projet1-main'
+  acrLoginServer: 'acrmuseevirtuel.azurecr.io'
+  imageName: 'projet1'
+  imageTag: '$(Build.BuildId)'
+  namespace: 'springapp-prod'
 
 steps:
 - checkout: self
@@ -15,13 +19,26 @@ steps:
 - script: |
     cd $(modulePath)
     mvn clean package -DskipTests
-  displayName: 'Build Spring Boot project'
+  displayName: 'CI - Build Spring Boot'
 
 - script: |
-    docker build -t projet1:$(Build.BuildId) $(modulePath)
-  displayName: 'Build Docker image'
+    docker build -t $(acrLoginServer)/$(imageName):$(imageTag) $(modulePath)
+  displayName: 'CI - Build Docker Image'
 
 - script: |
-    echo "CI completed successfully"
-    echo "Image built: projet1:$(Build.BuildId)"
-  displayName: 'Summary'
+    docker push $(acrLoginServer)/$(imageName):$(imageTag)
+  displayName: 'CI - Push Docker Image to ACR'
+
+- script: |
+    helm upgrade --install springapp ./helm/springapp \
+      --namespace $(namespace) \
+      --set image.repository=$(acrLoginServer)/$(imageName) \
+      --set image.tag=$(imageTag) \
+      --set imagePullSecrets[0].name=acr-secret
+  displayName: 'CD - Deploy Application to Kubernetes'
+
+- script: |
+    kubectl rollout status deployment/springapp-deployment -n $(namespace) --timeout=120s
+    kubectl get pods -n $(namespace)
+    kubectl get svc -n $(namespace)
+  displayName: 'CD - Verify Deployment'
