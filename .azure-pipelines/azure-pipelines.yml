@@ -12,15 +12,10 @@ variables:
 steps:
 - checkout: self
 
-- task: Maven@4
+- script: |
+    cd $(modulePath)
+    mvn clean package -DskipTests
   displayName: 'Build Spring Boot project'
-  inputs:
-    mavenPomFile: '$(modulePath)/pom.xml'
-    goals: 'clean package'
-    options: '-DskipTests'
-    javaHomeOption: 'JDKVersion'
-    jdkVersionOption: '1.8'
-    mavenVersionOption: 'Default'
 
 - script: |
     docker build -t projet1:$(Build.BuildId) $(modulePath)
