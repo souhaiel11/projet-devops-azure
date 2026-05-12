@@ -64,7 +64,14 @@ steps:
     docker push $(acrLoginServer)/$(imageName):latest
   displayName: 'CI - Push Docker Image to ACR'
 
-# ---- Etape 7 : Deploy with Helm ----
+# ---- Etape 7 : Load image into Minikube ----
+- script: |
+    minikube image load $(acrLoginServer)/$(imageName):$(imageTag)
+    echo "Image loaded into Minikube successfully"
+    minikube image ls | grep $(imageName)
+  displayName: 'CI - Load Image into Minikube'
+
+# ---- Etape 8 : Deploy with Helm ----
 - script: |
     helm upgrade --install springapp ./helm/springapp \
       --namespace $(namespace) \
@@ -72,13 +79,13 @@ steps:
       --set image.tag=$(imageTag) \
       --set image.pullPolicy=IfNotPresent \
       --wait \
-      --timeout 3m
+      --timeout 8m
   displayName: 'CD - Deploy to Kubernetes'
 
-# ---- Etape 8 : Verify Deployment ----
+# ---- Etape 9 : Verify Deployment ----
 - script: |
     kubectl rollout status deployment/springapp-deployment \
-      -n $(namespace) --timeout=180s
+      -n $(namespace) --timeout=300s
     echo "=== Pods ==="
     kubectl get pods -n $(namespace)
     echo "=== Services ==="
@@ -87,7 +94,7 @@ steps:
     kubectl get hpa -n $(namespace)
   displayName: 'CD - Verify Deployment'
 
-# ---- Etape 9 : Health Check ----
+# ---- Etape 10 : Health Check ----
 - script: |
     sleep 30
     STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://springapp.local)
