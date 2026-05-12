@@ -2,6 +2,7 @@ trigger:
   branches:
     include:
       - main
+      - develop
 
 pool:
   name: 'Default'
@@ -9,36 +10,92 @@ pool:
 variables:
   modulePath: 'projet1-main'
   acrLoginServer: 'acrmuseevirtuel.azurecr.io'
+  acrUsername: 'acrmuseevirtuel'
   imageName: 'projet1'
   imageTag: '$(Build.BuildId)'
   namespace: 'springapp-prod'
 
 steps:
+# ---- Etape 0 : Checkout ----
 - checkout: self
+  displayName: 'Checkout code'
 
+# ---- Etape 1 : Tests unitaires ----
+- script: |
+    cd $(modulePath)
+    mvn test
+  displayName: 'CI - Run Unit Tests'
+  continueOnError: false
+
+# ---- Etape 2 : Build Maven ----
 - script: |
     cd $(modulePath)
     mvn clean package -DskipTests
   displayName: 'CI - Build Spring Boot'
 
+# ---- Etape 3 : SonarQube ----
 - script: |
-    docker build -t $(acrLoginServer)/$(imageName):$(imageTag) $(modulePath)
+    cd $(modulePath)
+    mvn sonar:sonar \
+      -Dsonar.projectKey=musee-virtuel \
+      -Dsonar.projectName='Musee Virtuel' \
+      -Dsonar.host.url=http://localhost:9000 \
+      -Dsonar.login=$(SONAR_TOKEN)
+  displayName: 'CI - SonarQube Analysis'
+  continueOnError: true
+
+# ---- Etape 4 : Login ACR ----
+- script: |
+    echo $(ACR_PASSWORD) | docker login $(acrLoginServer) \
+      -u $(acrUsername) --password-stdin
+  displayName: 'CI - Login to ACR'
+
+# ---- Etape 5 : Build Docker Image ----
+- script: |
+    docker build \
+      -t $(acrLoginServer)/$(imageName):$(imageTag) \
+      -t $(acrLoginServer)/$(imageName):latest \
+      $(modulePath)
   displayName: 'CI - Build Docker Image'
 
+# ---- Etape 6 : Push Docker Image ----
 - script: |
     docker push $(acrLoginServer)/$(imageName):$(imageTag)
+    docker push $(acrLoginServer)/$(imageName):latest
   displayName: 'CI - Push Docker Image to ACR'
 
+# ---- Etape 7 : Deploy Helm ----
 - script: |
     helm upgrade --install springapp ./helm/springapp \
       --namespace $(namespace) \
       --set image.repository=$(acrLoginServer)/$(imageName) \
       --set image.tag=$(imageTag) \
-      --set imagePullSecrets[0].name=acr-secret
-  displayName: 'CD - Deploy Application to Kubernetes'
+      --set image.pullPolicy=IfNotPresent \
+      --set imagePullSecrets[0].name=acr-secret \
+      --wait \
+      --timeout 3m
+  displayName: 'CD - Deploy to Kubernetes'
 
+# ---- Etape 8 : Verify Deployment ----
 - script: |
-    kubectl rollout status deployment/springapp-deployment -n $(namespace) --timeout=120s
+    kubectl rollout status deployment/springapp-deployment \
+      -n $(namespace) --timeout=180s
+    echo "=== Pods ==="
     kubectl get pods -n $(namespace)
+    echo "=== Services ==="
     kubectl get svc -n $(namespace)
+    echo "=== HPA ==="
+    kubectl get hpa -n $(namespace)
   displayName: 'CD - Verify Deployment'
+
+# ---- Etape 9 : Test HTTP ----
+- script: |
+    sleep 30
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://springapp.local)
+    echo "HTTP Status: $STATUS"
+    if [ "$STATUS" != "200" ]; then
+      echo "Application not responding correctly!"
+      exit 1
+    fi
+    echo "Application is UP and running!"
+  displayName: 'CD - Health Check'

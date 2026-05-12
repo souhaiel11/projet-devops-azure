@@ -17,3 +17,13 @@ output "resource_group_name" {
   description = "Nom du Resource Group"
   value       = azurerm_resource_group.rg.name
 }
+
+output "app_insights_instrumentation_key" {
+  value     = azurerm_application_insights.ai.instrumentation_key
+  sensitive = true
+}
+
+output "app_insights_connection_string" {
+  value     = azurerm_application_insights.ai.connection_string
+  sensitive = true
+}

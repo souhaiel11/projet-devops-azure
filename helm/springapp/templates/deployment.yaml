@@ -15,6 +15,19 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MySQL..."
+              until nc -z mysql-service 3306; do
+                echo "MySQL not ready yet, waiting 5s..."
+                sleep 5
+              done
+              echo "MySQL is ready!"
       containers:
         - name: springapp
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -48,14 +61,18 @@ spec:
             httpGet:
               path: /actuator/health
               port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            # Spring Boot prend ~65s à démarrer → on attend 90s
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 5
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 60
-            periodSeconds: 15
+            # On donne encore plus de marge pour la liveness
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 5
           volumeMounts:
             - name: app-storage
               mountPath: /app/data
