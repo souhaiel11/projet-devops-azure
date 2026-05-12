@@ -40,7 +40,7 @@ steps:
       -Dsonar.projectKey=musee-virtuel \
       -Dsonar.projectName='Musee Virtuel' \
       -Dsonar.host.url=http://localhost:9000 \
-      -Dsonar.login=$(SONAR_TOKEN)
+      -Dsonar.token=$(SONAR_TOKEN)
   displayName: 'CI - SonarQube Analysis'
   continueOnError: true
 
@@ -58,20 +58,19 @@ steps:
       $(modulePath)
   displayName: 'CI - Build Docker Image'
 
-# ---- Etape 6 : Push Docker Image ----
+# ---- Etape 6 : Push Docker Image to ACR ----
 - script: |
     docker push $(acrLoginServer)/$(imageName):$(imageTag)
     docker push $(acrLoginServer)/$(imageName):latest
   displayName: 'CI - Push Docker Image to ACR'
 
-# ---- Etape 7 : Deploy Helm ----
+# ---- Etape 7 : Deploy with Helm ----
 - script: |
     helm upgrade --install springapp ./helm/springapp \
       --namespace $(namespace) \
       --set image.repository=$(acrLoginServer)/$(imageName) \
       --set image.tag=$(imageTag) \
       --set image.pullPolicy=IfNotPresent \
-      --set imagePullSecrets[0].name=acr-secret \
       --wait \
       --timeout 3m
   displayName: 'CD - Deploy to Kubernetes'
@@ -88,13 +87,13 @@ steps:
     kubectl get hpa -n $(namespace)
   displayName: 'CD - Verify Deployment'
 
-# ---- Etape 9 : Test HTTP ----
+# ---- Etape 9 : Health Check ----
 - script: |
     sleep 30
     STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://springapp.local)
     echo "HTTP Status: $STATUS"
     if [ "$STATUS" != "200" ]; then
-      echo "Application not responding correctly!"
+      echo "Application not responding!"
       exit 1
     fi
     echo "Application is UP and running!"
